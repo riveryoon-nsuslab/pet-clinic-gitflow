@@ -1,0 +1,99 @@
+name: "Build and Deploy"
+
+on:
+  #push:
+  #  branches: 
+  #    - 'release/**'
+  
+  pull_request:
+    branches:
+      - develop
+      - master
+    types:
+      - 'closed'
+
+permissions: write-all
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      ref_name: ${{ steps.get_ref_name.outputs.ref_name }}
+      branch_name: ${{ steps.get_ref_name.outputs.branch_name }}
+    steps:
+      - name: Get ref_name
+        id: get_ref_name
+        run: |
+          if [ ${{ github.base_ref }} == 'master' ]; then
+            echo "branch_name=${{ github.base_ref }}"
+            echo "branch_name=${{ github.base_ref }}" >> $GITHUB_OUTPUT 
+            echo "ref_name=${GITHUB_HEAD_REF#*/}"
+            echo "ref_name=${GITHUB_HEAD_REF#*/}" >> $GITHUB_OUTPUT || exit 1
+          fi
+
+          if [ ${{ github.base_ref }} == 'develop' ]; then
+            echo "branch_name=${{ github.base_ref }}"
+            echo "branch_name=${{ github.base_ref }}" >> $GITHUB_OUTPUT
+            echo "ref_name="
+            echo "ref_name=" >> $GITHUB_OUTPUT || exit 1
+          fi
+
+          #if [ ${{github.event_name}} != 'pull_request' ]; then
+          #  echo "branch_name=release"
+          #  echo "branch_name=release" >> $GITHUB_OUTPUT
+          #  echo "ref_name=${GITHUB_REF##*/}"
+          #  echo "ref_name=${GITHUB_REF##*/}" >> $GITHUB_OUTPUT || exit 1
+          #fi
+  ci:
+    needs: [setup]
+    uses: ./.github/workflows/reusable-build.yml
+    with:
+      service: ${{ inputs.service_name || 'petclinic-service' }}
+      branch: ${{ needs.setup.outputs.branch_name }}
+      build_number: ${{ inputs.release_version || needs.setup.outputs.ref_name }}
+    secrets: inherit
+  
+  develop:
+    needs: [ci]
+    if: ${{ inputs.develop == true || startsWith(needs.setup.outputs.branch_name, 'develop') }}
+    uses: ./.github/workflows/update-manifest.yml
+    with:
+      gitops_repo: 'bobbykim-nsuslab/petclinic-gitops'
+      service: petclinic-service
+      image_tag: ${{ needs.ci.outputs.build_image }} 
+      environment: 'develop'
+    secrets: inherit
+  
+  test:
+    needs: [ci]
+    if: ${{ inputs.test == true || startsWith(needs.setup.outputs.branch_name, 'develop')}}
+    uses: ./.github/workflows/update-manifest.yml
+    with:
+      gitops_repo: 'bobbykim-nsuslab/petclinic-gitops'
+      service: ${{ inputs.service_name || 'petclinic-service' }}
+      image_tag: ${{ needs.ci.outputs.build_image }} 
+      environment: 'test'
+    secrets: inherit
+  
+  stage:
+    needs: [ci]
+    if: ${{ inputs.stage == true || startsWith(needs.setup.outputs.branch_name, 'develop')}}
+    uses: ./.github/workflows/update-manifest.yml
+    with:
+      gitops_repo: 'bobbykim-nsuslab/petclinic-gitops'
+      service: ${{ inputs.service_name || 'petclinic-service' }}
+      image_tag: ${{ needs.ci.outputs.build_image }} 
+      environment: 'stage'
+    secrets: inherit
+  
+  production:
+    needs: [ci]
+    if: ${{ inputs.production == true ||  startsWith(needs.setup.outputs.branch_name, 'master') }}
+    uses: ./.github/workflows/update-manifest.yml
+    with:
+      gitops_repo: 'bobbykim-nsuslab/petclinic-gitops'
+      service: ${{ inputs.service_name || 'petclinic-service' }}
+      image_tag: ${{ needs.ci.outputs.build_image }} 
+      environment: 'production'
+    secrets: inherit
+ 

@@ -1,0 +1,126 @@
+name: "Build and Deploy Manually"
+
+on:
+  workflow_dispatch:
+    inputs:
+      service_name:
+        type: choice
+        description: 'Select the service you want to build and deploy on develop branch' 
+        options: 
+        - petclinic-service
+        - service-a
+        - service-b
+        - service-c
+      develop:
+        type: boolean
+        description: 'Enable Develop Environment' 
+        required: false
+        default: false
+      test:
+        type: boolean
+        description: 'Enable Test Environment' 
+        required: false
+        default: false
+      stage:
+        type: boolean
+        description: 'Enable Stage Environment' 
+        required: false
+        default: false
+      production:
+        type: boolean
+        description: 'Enable Production Environment' 
+        required: false
+        default: false
+      release_version:
+        type: string 
+        description: 'Release version' 
+        required: true
+        default: 'release'
+
+permissions: write-all
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      ref_name: ${{ steps.get_ref_name.outputs.ref_name }}
+      branch_name: ${{ steps.get_ref_name.outputs.branch_name }}
+    steps:
+      - name: Get ref_name
+        id: get_ref_name
+        run: |
+          if [ ${{ inputs.production }} == true ]; then
+            echo "branch_name=master"
+            echo "branch_name=master" >> $GITHUB_OUTPUT 
+            REF_NAME="${{ inputs.release_version || 'latest'}}"
+            echo "ref_name=${REF_NAME}"
+            echo "ref_name=${REF_NAME}" >> $GITHUB_OUTPUT || exit 1
+          fi
+
+          if [ ${{ inputs.develop }} == true ]; then
+            echo "branch_name=develop"
+            echo "branch_name=develop" >> $GITHUB_OUTPUT
+            echo "ref_name="
+            echo "ref_name=" >> $GITHUB_OUTPUT || exit 1
+          fi
+
+          if [ [ ${{ inputs.test }} == true ] || [ ${{ inputs.stage }} == true ] ]; then
+            echo "branch_name=release"
+            echo "branch_name=release" >> $GITHUB_OUTPUT
+            REF_NAME="${{ inputs.release_version || 'latest'}}"
+            echo "ref_name=${REF_NAME}"
+            echo "ref_name=${REF_NAME}" >> $GITHUB_OUTPUT || exit 1
+          fi
+  ci:
+    needs: [setup]
+    uses: ./.github/workflows/reusable-build.yml
+    with:
+      service: ${{ inputs.service_name || 'petclinic-service' }}
+      branch: ${{ needs.setup.outputs.branch_name }}
+      build_number: ${{ needs.setup.outputs.ref_name }}
+    secrets: inherit
+  
+  develop:
+    needs: [ci]
+    if: ${{ inputs.develop == true }}
+    uses: ./.github/workflows/update-manifest.yml
+    with:
+      gitops_repo: 'bobbykim-nsuslab/petclinic-gitops'
+      service: petclinic-service
+      image_tag: ${{ needs.ci.outputs.build_image }} 
+      environment: 'develop'
+    secrets: inherit
+  
+  test:
+    needs: [ci]
+    if: ${{ inputs.test == true }}
+    uses: ./.github/workflows/update-manifest.yml
+    with:
+      gitops_repo: 'bobbykim-nsuslab/petclinic-gitops'
+      service: ${{ inputs.service_name || 'petclinic-service' }}
+      image_tag: ${{ needs.ci.outputs.build_image }} 
+      environment: 'test'
+    secrets: inherit
+  
+  stage:
+    needs: [ci]
+    if: ${{ inputs.stage == true }}
+    uses: ./.github/workflows/update-manifest.yml
+    with:
+      gitops_repo: 'bobbykim-nsuslab/petclinic-gitops'
+      service: ${{ inputs.service_name || 'petclinic-service' }}
+      image_tag: ${{ needs.ci.outputs.build_image }} 
+      environment: 'stage'
+    secrets: inherit
+  
+  production:
+    needs: [ci]
+    if: ${{ inputs.production == true }}
+    uses: ./.github/workflows/update-manifest.yml
+    with:
+      gitops_repo: 'bobbykim-nsuslab/petclinic-gitops'
+      service: ${{ inputs.service_name || 'petclinic-service' }}
+      image_tag: ${{ needs.ci.outputs.build_image }} 
+      environment: 'production'
+    secrets: inherit
+ 

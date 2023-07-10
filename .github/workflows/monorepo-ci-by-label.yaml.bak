@@ -1,0 +1,107 @@
+name: "Step2 - MonoRepo CI Workflow"
+
+on:
+  #push:
+  #  branches: [ main ]
+  pull_request:
+    branches:
+      - develop
+      - master
+    types:
+      - 'closed'
+      - 'labeled'
+  
+
+permissions: write-all
+
+jobs:
+  # label:
+  #   if: github.event.pull_request.merged == true
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - id: check-labels
+  #       uses: mheap/github-action-required-labels@v5
+  #       with:
+  #         mode: exactly
+  #         count: 1
+  #         labels: "service-a, service-b, service-c"
+  #     - run: |
+  #         echo ${{github.event.label.name}}
+  #         echo ${{steps.check-labels.outputs.labels}}
+  #         echo "Enabled Features:"
+  #         for f in $(echo "{{steps.check-labels.outputs.labels}}" | sed "s/,/ /g")
+  #         do
+  #           echo "$f"
+  #         done
+   service-a:
+     if: ${{ github.event.pull_request.merged == 'true'}} && ${{ github.event.label.name == 'service-a' }}  
+     uses: ./.github/workflows/build-and-scanning.yml
+     with:
+       ecr_repository: 'service-a'
+       environment: ${{ github.head_ref }}
+     secrets: inherit
+  
+   service-b:
+     if: ${{ github.event.pull_request.merged == 'true'}} && ${{ github.event.label.name == 'service-b' }}  
+     uses: ./.github/workflows/build-and-scanning.yml
+     with:
+       ecr_repository: 'service-b'
+       environment: ${{ github.head_ref }}
+     secrets: inherit
+
+  # service-c:
+  #   if: github.event.pull_request.merged && ${{ contains(github.event.*.labels.*.name, 'service-all') }} 
+  #   uses: ./.github/workflows/build-and-scanning.yml
+  #   with:
+  #     ecr_repository: 'service-c'
+  #     environment: ${{ github.head_ref }}
+  #   secrets: inherit
+  
+  # default:
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     security-events: write
+  #     contents: read
+  #     actions: read
+
+  #   steps:
+  #   - name : default test
+  #     run: |
+  #       echo ${{github.event.pull_request.labels.*.name}}
+
+  
+  
+  #    DOCKER_IMAGE_REPO: 'jingood2/petclinic-demo' 
+  #    GITOPS_REPO: 'jingood2/petclinic-demo-gitops'
+  #    K8S_YAML_DIR: './apps/petclinic-demo'
+  #    BRANCH: 'release'
+  #    ENVIRONMENT: 'stage'
+  #  secrets: inherit
+
+  #prod-cd:
+  #  needs: [ci]
+  #  if: github.event.pull_request.merged && github.base_ref == 'release'
+  #  uses: ./.github/workflows/update-manifest.yml
+  #  with:
+  #    DOCKER_IMAGE_REPO: 'jingood2/petclinic-demo' 
+  #    GITOPS_REPO: 'jingood2/petclinic-demo-gitops'
+  #    K8S_YAML_DIR: './apps/petclinic-demo'
+  #    BRANCH: 'release'
+  #    ENVIRONMENT: 'stage'
+  #  secrets: inherit
+  
+  #approval:
+
+  #prod-cd:
+  #  needs: [dev-cd,approval]
+  #  permissions:
+  #    id-token: write  # need this for OIDC
+  #    contents: read   # This is required for actions/checkout
+  #  uses: ./.github/workflows/update-manifest.yml
+  #  with:
+  #    DOCKER_IMAGE_REPO: 'docker.io/jingood2/petclinic-demo' 
+  #    GITOPS_REPO: 'jingood2/petclinic-demo-gitops'
+  #    K8S_YAML_DIR: './apps/petclinic-demo'
+  #    BRANCH: 'main'
+  #    ENVIRONMENT: 'prod'
+  #  secrets: inherit

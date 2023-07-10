@@ -1,0 +1,117 @@
+name: Build and Deploy on gitops
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        type: string
+        required: false
+        default: 'petclinic-service'
+      branch:
+        type: string
+        required: true
+        description: 'provide name of current branch. [develop,test,stage,production]'
+      environment:
+        type: string
+        required: false
+        description: 'provide name of environment. [develop,test,stage,production]'
+      build_number:
+        type: string
+        required: false
+    outputs:
+      build_image: 
+        description: "Build Image Output String"
+        value: ${{ jobs.build.outputs.build_image }}
+
+permissions: write-all
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    outputs:
+      build_image: ${{ steps.build-image.outputs.BUILD_IMAGE }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+  
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+      
+      - name: Set builde number
+        run: |
+          echo 'BUILD_NUMBER=${{ github.run_number }}' >> $GITHUB_ENV
+      
+      # build_number is github.head_ref v0.1.1
+      - name: Set environment variables for production
+        if: ${{ inputs.branch== 'master' }}
+        run: |
+          echo 'IMAGE_TAG=${{ inputs.build_number }}' >> $GITHUB_ENV
+          echo 'IMAGE_TAG_LATEST=latest' >> $GITHUB_ENV
+          echo 'BUILD_CONFIG=Release - Live' >> $GITHUB_ENV
+    
+      # v0.1.1-1
+      - name: Set environment variables for stage
+        if: ${{ inputs.branch== 'release' }}
+        run: |
+          echo 'IMAGE_TAG=${{ inputs.build_number }}-${{ env.BUILD_NUMBER }}' >> $GITHUB_ENV
+          echo 'IMAGE_TAG_LATEST=release-latest' >> $GITHUB_ENV
+          echo 'BUILD_CONFIG=Release - UAT' >> $GITHUB_ENV 
+
+      # develop-1
+      - name: Set environment variables for development
+        if: ${{ inputs.branch == 'develop' }}
+        run: |
+          echo 'IMAGE_TAG=develop-${{ env.BUILD_NUMBER }}' >> $GITHUB_ENV
+          echo 'IMAGE_TAG_LATEST=develop-latest' >> $GITHUB_ENV
+          echo 'BUILD_CONFIG=Debug' >> $GITHUB_ENV 
+      
+      
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          service: ${{ inputs.service }}
+          IMAGE_NAME: ${{ steps.login-ecr.outputs.registry }}/gp/${{inputs.service}}
+        
+        run: |
+          docker build \
+            -t $IMAGE_NAME:$IMAGE_TAG \
+            -t $IMAGE_NAME:$IMAGE_TAG_LATEST . 
+          echo "Pushing image to ECR..."
+          docker push $IMAGE_NAME:$IMAGE_TAG
+          docker push $IMAGE_NAME:$IMAGE_TAG_LATEST
+          echo "BUILD_IMAGE=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+        
+      - name: Clear docker images
+        run: |
+          docker image prune -f
+    
+  slack-message:
+    needs: build
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Send slack message
+      uses: 8398a7/action-slack@v3
+      with:
+        status: ${{ job.status }}
+        author_name: Build Failed
+        job_name: build
+        fields: repo,message,commit,author,ref # selectable (default: repo,message)
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }} # required
+      if: failure() # Pick up events even if the job fails or is canceled.

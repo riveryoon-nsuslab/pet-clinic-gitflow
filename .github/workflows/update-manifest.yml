@@ -1,0 +1,76 @@
+name: 'Update gitops manifest'
+
+on:
+  workflow_call:
+    inputs:
+      gitops_repo:
+        type: string
+        required: false
+        description: 'Gitops Repository'
+        default: 'bobbykim-nsuslab/petclinic-gitops'
+      brand:
+        type: string
+        required: false
+        description: 'Brand to deploy'
+      service:
+        type: string
+        required: false
+        description: 'Service to deploy'
+        default: 'service-a'
+      image_tag:
+        type: string
+        required: true
+        description: 'Build number to deploy'
+      environment:
+        type: string
+        required: false
+        description: 'Environment to deploy'
+        default: 'develop'
+jobs:
+  update-manifest:
+    name: deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: ${{ inputs.gitops_repo}}
+          ref: main
+          token: ${{ secrets.GH_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: check imageTag
+        run: |
+          echo "imageTag: ${{ inputs.image_tag }}"
+
+      - name: update imageTag
+        run: |
+          sed -i 's|^imageTag:\s*\S*$|imageTag: ${{ inputs.image_tag }}|g' helm/${{ inputs.service }}/values.${{ inputs.environment }}.yaml
+      
+      - name: Push the changes to git
+        run: |
+          git config --local user.name github-actions
+          git config --local user.email github-actions@github.com
+          git add .
+          git commit -am "update imageTag to ${{ inputs.image_tag }} for ${{ inputs.service }}"
+            
+        # Note: if you push on public repository, you should use PAT
+      - name: Push changes
+        uses: ad-m/github-push-action@master
+        with:
+          repository: ${{ inputs.gitops_repo}}
+          force: true
+          github_token: ${{ secrets.GH_TOKEN }}
+          branch: main
+
+      - uses: fastify/github-action-merge-dependabot@v2.1.1
+        with:
+          github-token: ${{ secrets.GH_TOKEN}}
+
+      # - name: Commit & Push
+      #   run: |
+      #     git config user.name "GitHub actions"
+      #     git config user.email "<>"
+      #     git commit -am "update imageTag to ${{ inputs.image_tag }} for ${{ inputs.service }}"
+      #     git push origin main

@@ -1,0 +1,53 @@
+name: "Step2 - MonoRepo CI Workflow"
+
+on:
+  workflow_dispatch:
+    inputs:
+      all:
+        type: boolean
+        description: 'build all of services'
+        required: false
+      build-serviceA:
+        type: boolean 
+        description: 'build serviceA'
+        required: false
+        default: false
+      build-serviceB:
+        type: boolean 
+        description: 'build serviceB'
+        required: false
+        default: false
+      build-serviceC:
+        type: boolean 
+        description: 'build serviceC'
+        required: false
+        default: false
+
+permissions: write-all
+
+jobs:
+  service-a:
+    if: ${{ github.event.inputs.build-serviceA == 'true' }} 
+    uses: ./.github/workflows/build-and-scanning.yml
+    with:
+      ecr_repository: 'service-a'
+      environment: ${{ github.head_ref }}
+    secrets: inherit
+ 
+  service-b:
+    if: ${{ github.event.inputs.build-serviceB == 'true' }} 
+    uses: ./.github/workflows/build-and-scanning.yml
+    with:
+      ecr_repository: 'service-b'
+      environment: ${{ github.head_ref }}
+    secrets: inherit
+  
+  service-c:
+    if: ${{ github.event.inputs.build-serviceC == 'true' }} 
+    uses: ./.github/workflows/build-and-scanning.yml
+    with:
+      ecr_repository: 'service-c'
+      environment: ${{ github.head_ref }}
+    secrets: inherit
+
+      

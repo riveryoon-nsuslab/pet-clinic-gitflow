@@ -1,0 +1,117 @@
+name: "Static Analysis and Unit Test"
+on:
+  push:
+    branches: ['feature/**', 'chore/**']
+
+  #pull_request:
+  #  branches: [ develop ]
+  #  types: [ opened, reopened, edited, synchronize ]
+
+jobs:
+  static-analysis:
+    runs-on: ubuntu-latest
+    permissions: write-all
+    #strategy:
+    #  fail-fast: false
+    #  matrix:
+    #    language: [ 'java' ]
+    steps:
+      # If this step fails, then you should remove it and run the build manually (see below).
+      # Here is where you build your code
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      
+      #ToDo: Code Analysis with SonarQube
+      - name : SonarQube Test
+        run: |
+           echo "ToDo: SonarQube Test"
+      # - name: Setup sonarscanner (Non-PR)
+      #   if: github.event.number == '' && github.actor != 'dependabot[bot]'
+      #   run: |
+      #     export PATH="$PATH:~/.dotnet/tools"
+      #     dotnet sonarscanner begin \
+      #       /o:"pyloncloud" \
+      #       /k:"pyloncloud_88agent" \
+      #       /d:sonar.host.url="https://sonarcloud.io" \
+      #       /d:sonar.login="${{ secrets.SONAR_TOKEN }}" \
+      #       /v:net6.0
+      
+      # - name: Setup sonarscanner (PR)
+      #   if: github.event.number && github.actor != 'dependabot[bot]'
+      #   run: |
+      #     export PATH="$PATH:~/.dotnet/tools"
+      #     dotnet sonarscanner begin \
+      #       /o:"pyloncloud" \
+      #       /k:"pyloncloud_88agent" \
+      #       /d:sonar.host.url="https://sonarcloud.io" \
+      #       /d:sonar.login="${{ secrets.SONAR_TOKEN }}" \
+      #       /d:sonar.pullrequest.key="${{ github.event.number }}" \
+      #       /d:sonar.pullrequest.branch="${{ github.event.pull_request.title }}" \
+      #       /d:sonar.pullrequest.base="develop" \
+      #       /d:sonar.pullrequest.provider="github" \
+      #       /d:sonar.pullrequest.github.repository="pyloncloud/88agent" \
+      #       /v:net6.0
+
+  unit-test:
+    needs: [static-analysis]
+    runs-on: ubuntu-latest
+    permissions: write-all
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Gradle Test
+        run: |
+          ./gradlew test 
+    
+      # 테스트 후 Result를 보기위해 Publish Unit Test Results step 추가
+      # - name: Publish Unit Test Results
+      #   uses: EnricoMi/publish-unit-test-result-action@v1
+      #   if: ${{ always() }}  # 테스트가 실패하여도 Report를 보기 위해 `always`로 설정
+      #   with:
+      #     files: build/test-results/**/*.xml
+        
+      - name: Register Check Comment When Test failed 
+        uses: mikepenz/action-junit-report@v3
+        if: always()
+        with:
+          report_paths: '**/build/test-results/test/*.xml'
+          token: ${{ github.token }}
+      
+      - name: test
+        run: |
+          cd build/test-results/test
+          ls -al 
+      
+      # - name: notify-tests
+      #   uses: ivanklee86/xunit-slack-reporter@v1.4.0
+      #   env:
+      #     EXIT_CODE_FROM_REPORT: "True"
+      #     SLACK_CHANNEL: terraform-plan
+      #     SLACK_TOKEN: ${{ secrets.SLACK_TOKEN }}
+      #     XUNIT_PATH: build/test-results/test/*.xml
+      
+      - name: JUnit Slack Reporter with Coverage
+        uses: neochae1/upload-test-result@v1.0.0
+        env:
+          JUNIT_TEST_RESULTS: build/test-results/test
+          JACOCO_REPORTS: build/reports/jacoco/test/jacocoTestReport.xml
+          SLACK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        
+      # - name: Send slack message
+      #   uses: 8398a7/action-slack@v3
+      #   with:
+      #     status: ${{ job.status }}
+      #     job_name: build
+      #     fields: repo,message,commit,author,ref # selectable (default: repo,message)
+      #   env:
+      #     SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }} # required
+      #   if: always() # Pick up events even if the job fails or is canceled.
+    
+      - name: Check Labels
+        if: startsWith(github.event.pull_request.head.ref, 'feature/') && github.base_ref == 'develop'
+        id: labeler
+        uses: jimschubert/labeler-action@v1
+        with:
+          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}

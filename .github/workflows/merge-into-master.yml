@@ -1,0 +1,94 @@
+name: "Merge into Master Branch"
+
+on:
+  pull_request:
+    branches:
+      - master
+    types:
+      - closed
+
+jobs:
+  publish-release-and-tag:
+    name: Publish release and tag
+    runs-on: ubuntu-latest
+    permissions: write-all
+
+    # only merged pull requests that begin with 'release/' or 'hotfix/' must trigger this job
+    if: github.event.pull_request.merged == true &&
+      (
+        startsWith(github.event.pull_request.head.ref, 'release/') || 
+        startsWith(github.event.pull_request.head.ref, 'hotfix/')  ||
+        startsWith(github.event.pull_request.head.ref, 'hotfix-') 
+      )
+
+    steps:
+      - name: Extract version from branch name (for release branches)
+        if: startsWith(github.event.pull_request.head.ref, 'release/')
+        run: |
+          BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
+          VERSION=${BRANCH_NAME#release/}
+          echo "RELEASE_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "BRANCH_NAME=Release" >> $GITHUB_ENV
+
+      - name: Extract version from branch name (for hotfix branches)
+        if: startsWith(github.event.pull_request.head.ref, 'hotfix/')
+        run: |
+          BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
+          VERSION=${BRANCH_NAME#hotfix/}
+          echo "RELEASE_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "BRANCH_NAME=Hotfix" >> $GITHUB_ENV
+
+      - name: Extract version from branch name (for hotfix branches)
+        if: startsWith(github.event.pull_request.head.ref, 'hotfix-')
+        run: |
+          BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
+          VERSION=${BRANCH_NAME#hotfix-}
+          echo "RELEASE_VERSION=$VERSION" >> $GITHUB_ENV       
+          echo "BRANCH_NAME=Hotfix" >> $GITHUB_ENV
+
+      - name: Update Release draft
+        id: draft-release
+        uses: release-drafter/release-drafter@v5.22.0
+        with:
+          name: ${{ env.BRANCH_NAME }} ${{ env.RELEASE_VERSION }}
+          tag: ${{ env.RELEASE_VERSION }}
+          publish: true
+          config-name: release-drafter-config.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Run Trivy in GitHub SBOM mode and submit results to Dependency Graph
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          format: 'github'
+          output: 'dependency-results.sbom.json'
+          image-ref: '.'
+          github-pat: ${{ secrets.GITHUB_TOKEN }}
+  
+  merge-master-into-develop:
+    name: Merge Master into develop branch 
+    needs: [ publish-release-and-tag ]
+    runs-on: ubuntu-latest
+    permissions: write-all
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Merge master -> develop
+        uses: devmasx/merge-branch@master
+        with:
+          type: now
+          target_branch: develop
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+  
+  #delete-release-branch:
+  #  runs-on: ubuntu-latest
+  #  permissions: write-all
+  #  needs: [ merge-master-into-develop ]
+  #  steps:
+  #    - name: delete release branch
+  #      uses: SvanBoxel/delete-merged-branch@main
+  #      env:
+  #        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
