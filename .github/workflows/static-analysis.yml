@@ -112,6 +112,6 @@ jobs:
       - name: Check Labels
         if: startsWith(github.event.pull_request.head.ref, 'feature/') && github.base_ref == 'develop'
         id: labeler
-        uses: jimschubert/labeler-action@v1
+        uses: jimschubert/labeler-action@v2
         with:
           GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
