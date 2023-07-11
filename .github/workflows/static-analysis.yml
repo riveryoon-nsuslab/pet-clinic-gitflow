@@ -93,7 +93,7 @@ jobs:
       #     XUNIT_PATH: build/test-results/test/*.xml
       
       - name: JUnit Slack Reporter with Coverage
-        uses: neochae1/upload-test-result@v1.0.0
+        uses: neochae1/upload-test-result@v1.0.1
         env:
           JUNIT_TEST_RESULTS: build/test-results/test
           JACOCO_REPORTS: build/reports/jacoco/test/jacocoTestReport.xml
