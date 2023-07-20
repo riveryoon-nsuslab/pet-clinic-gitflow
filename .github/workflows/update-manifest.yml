@@ -64,7 +64,7 @@ jobs:
           github_token: ${{ secrets.GH_TOKEN }}
           branch: main
 
-      - uses: fastify/github-action-merge-dependabot@v2.1.1
+      - uses: fastify/github-action-merge-dependabot@v3.8.0
         with:
           github-token: ${{ secrets.GH_TOKEN}}
 
